@@ -1,0 +1,20 @@
+# Environment variables / secrets
+.env
+
+# Database
+career_agent.db
+
+# Uploaded and generated files
+uploads/
+generated/
+
+# Python
+__pycache__/
+*.pyc
+
+# PyCharm
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

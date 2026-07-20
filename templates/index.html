@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Casefile — Resume Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<div class="grain"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">§</span>
+    <span class="brand-name">Casefile</span>
+  </div>
+  <div class="brand-tag">resume intelligence, filed and cross-referenced</div>
+</header>
+
+<main class="wrap">
+
+  <!-- STEP 1: RESUME -->
+  <section class="panel" id="resume-panel">
+    <div class="panel-label"><span class="tab">Exhibit A</span> Your Resume</div>
+
+    <div id="resume-empty" class="dropzone {% if resume %}hidden{% endif %}">
+      <input type="file" id="resume-input" accept=".pdf,.docx,.txt" hidden>
+      <div class="dropzone-inner">
+        <div class="dropzone-icon">＋</div>
+        <p>Drop your resume here, or <button class="link-btn" id="browse-btn">browse</button></p>
+        <p class="hint">PDF, DOCX or TXT — stored once, reused for every job you check</p>
+      </div>
+    </div>
+
+    <div id="resume-loaded" class="resume-card {% if not resume %}hidden{% endif %}">
+      <div class="resume-card-row">
+        <div>
+          <div class="resume-name" id="resume-name">{{ resume.structured.name if resume else '' }}</div>
+          <div class="resume-file" id="resume-filename">{{ resume.filename if resume else '' }}</div>
+        </div>
+        <div class="resume-actions">
+          <button class="ghost-btn" id="replace-btn">Replace</button>
+          <button class="ghost-btn danger" id="delete-btn">Delete</button>
+        </div>
+      </div>
+    </div>
+    <div class="status-line" id="resume-status"></div>
+  </section>
+
+  <!-- STEP 2: JD -->
+  <section class="panel" id="jd-panel">
+    <div class="panel-label"><span class="tab">Exhibit B</span> Job Description</div>
+    <textarea id="jd-text" placeholder="Paste the job description you're targeting…"></textarea>
+    <button class="primary-btn" id="analyze-btn">Check match</button>
+    <div class="status-line" id="jd-status"></div>
+  </section>
+
+  <!-- STEP 3: RESULTS -->
+  <section class="panel results hidden" id="results-panel">
+    <div class="panel-label"><span class="tab">Findings</span> Match Report</div>
+
+    <div class="results-grid">
+      <div class="gauge-block">
+        <svg viewBox="0 0 200 120" class="gauge">
+          <path d="M 20 100 A 80 80 0 0 1 180 100" class="gauge-track"/>
+          <path d="M 20 100 A 80 80 0 0 1 180 100" class="gauge-fill" id="gauge-fill"/>
+          <line x1="100" y1="100" x2="100" y2="35" class="gauge-needle" id="gauge-needle"/>
+          <circle cx="100" cy="100" r="6" class="gauge-hub"/>
+        </svg>
+        <div class="gauge-readout"><span id="score-value">--</span><span class="gauge-unit">/ 100</span></div>
+        <div class="gauge-caption">current match</div>
+      </div>
+
+      <div class="findings-block">
+        <div class="finding-group">
+          <h4>Missing from your resume</h4>
+          <div class="chip-row" id="missing-keywords"></div>
+        </div>
+        <div class="finding-group">
+          <h4>Suggested improvements</h4>
+          <ul id="suggestions-list" class="suggestion-list"></ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="action-row">
+      <button class="primary-btn" id="tailor-btn">Rearrange resume for this job</button>
+      <button class="secondary-btn" id="letter-btn">Write cover letter</button>
+    </div>
+    <div class="status-line" id="tailor-status"></div>
+  </section>
+
+  <!-- STEP 4: COMPARISON + DOWNLOAD -->
+  <section class="panel hidden" id="compare-panel">
+    <div class="panel-label"><span class="tab">Revised</span> Tailored Resume</div>
+
+    <div class="compare-row">
+      <div class="compare-score">
+        <span class="compare-label">Before</span>
+        <span class="compare-num" id="score-before">--</span>
+      </div>
+      <div class="compare-arrow">→</div>
+      <div class="compare-score after">
+        <span class="compare-label">After</span>
+        <span class="compare-num" id="score-after">--</span>
+      </div>
+    </div>
+
+    <p class="fineprint">Same facts, reordered and reworded for this job. Nothing is invented.</p>
+
+    <div class="download-row">
+      <button class="download-btn" id="download-pdf">Download as PDF</button>
+      <button class="download-btn" id="download-docx">Download as DOCX</button>
+    </div>
+  </section>
+
+  <!-- COVER LETTER -->
+  <section class="panel hidden" id="letter-panel">
+    <div class="panel-label"><span class="tab">Exhibit C</span> Cover Letter</div>
+    <div class="letter-box" id="letter-text"></div>
+    <button class="ghost-btn" id="copy-letter-btn">Copy to clipboard</button>
+  </section>
+
+</main>
+
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
