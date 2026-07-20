@@ -19,51 +19,14 @@ Casefile helps job seekers quickly evaluate and improve their resumes against re
 
 ## Tech Stack
 
-
-|
- Layer 
-|
- Technology 
-|
-|
----
-|
----
-|
-|
- Backend 
-|
- Python (Flask) 
-|
-|
- Database 
-|
- SQLite 
-|
-|
- LLM 
-|
- Groq API (
-`llama-3.3-70b-versatile`
-) 
-|
-|
- Document Generation 
-|
-`python-docx`
-, 
-`reportlab`
-|
-|
- Resume Parsing 
-|
-`pdfplumber`
-|
-|
- Frontend 
-|
- HTML, CSS, JavaScript (custom, no framework) 
-|
+| Layer | Technology |
+|---|---|
+| Backend | Python (Flask) |
+| Database | SQLite |
+| LLM | Groq API (`llama-3.3-70b-versatile`) |
+| Document Generation | `python-docx`, `reportlab` |
+| Resume Parsing | `pdfplumber` |
+| Frontend | HTML, CSS, JavaScript (custom, no framework) |
 
 ## Design
 
@@ -71,47 +34,50 @@ The interface follows a "dossier / case-file" visual theme — an ink-navy backg
 
 ## Project Structure
 
+```
 career-agent/
-├── app.py # Flask routes
-├── database.py # SQLite (resume + analysis history)
-├── llm_agent.py # Groq API calls (parse, score, tailor, cover letter)
-├── file_generator.py # Resume text extraction + DOCX/PDF rendering
-├── templates/index.html
-├── static/css/style.css
-├── static/js/script.js
+├── app.py               # Flask routes
+├── database.py          # SQLite (resume + analysis history)
+├── llm_agent.py          # Groq API calls (parse, score, tailor, cover letter)
+├── file_generator.py    # Resume text extraction + DOCX/PDF rendering
+├── templates/
+│   └── index.html
+├── static/
+│   ├── css/style.css
+│   └── js/script.js
 ├── requirements.txt
 ├── .gitignore
 ├── .env.example
-├── Procfile # For deployment (gunicorn)
+├── Procfile              # For deployment (gunicorn)
 └── README.md
-
+```
 
 ## Setup & Local Development
 
 1. Clone the repository:
-```bash
+   ```bash
    git clone https://github.com/nayab-gull-it/casefile-resume-agent.git
    cd casefile-resume-agent
-```
+   ```
 
 2. Install dependencies:
-```bash
+   ```bash
    pip install -r requirements.txt
-```
+   ```
 
 3. Set your Groq API key as an environment variable:
-```bash
+   ```bash
    # Windows (PowerShell)
    $env:GROQ_API_KEY="your-api-key-here"
 
    # macOS/Linux
    export GROQ_API_KEY="your-api-key-here"
-```
+   ```
 
 4. Run the app:
-```bash
+   ```bash
    python app.py
-```
+   ```
 
 5. Open `http://localhost:5000` in your browser.
 
