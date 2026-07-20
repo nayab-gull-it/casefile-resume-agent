@@ -14,6 +14,13 @@ ALLOWED_EXT = {"pdf", "docx", "txt"}
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5MB
 
+# This must run on import (not just when run directly with `python app.py`),
+# because gunicorn imports this module instead of executing it as __main__.
+# Without this, the database tables never get created on Render.
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(GENERATED_DIR, exist_ok=True)
+db.init_db()
+
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
@@ -157,7 +164,4 @@ def download(fmt):
 
 
 if __name__ == "__main__":
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    os.makedirs(GENERATED_DIR, exist_ok=True)
-    db.init_db()
     app.run(debug=True, host="0.0.0.0", port=5000)
