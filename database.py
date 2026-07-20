@@ -1,7 +1,8 @@
 """
 database.py
-Handles all SQLite storage: the user's current resume, and a history
-of job-description analyses (old score vs new score after rearrange).
+Handles all SQLite storage: each visitor's current resume, and a history
+of job-description analyses (old score vs new score after rearrange),
+scoped per browser session so visitors never see each other's data.
 """
 import sqlite3
 import json
@@ -21,7 +22,7 @@ def init_db():
     conn = get_conn()
     conn.execute("""
         CREATE TABLE IF NOT EXISTS resume (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
+            session_id TEXT PRIMARY KEY,
             filename TEXT,
             raw_text TEXT,
             structured_json TEXT,
@@ -31,6 +32,7 @@ def init_db():
     conn.execute("""
         CREATE TABLE IF NOT EXISTS analysis (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT,
             jd_text TEXT,
             original_score INTEGER,
             new_score INTEGER,
@@ -45,20 +47,20 @@ def init_db():
     conn.close()
 
 
-def save_resume(filename, raw_text, structured_json):
+def save_resume(session_id, filename, raw_text, structured_json):
     conn = get_conn()
-    conn.execute("DELETE FROM resume WHERE id = 1")
+    conn.execute("DELETE FROM resume WHERE session_id = ?", (session_id,))
     conn.execute(
-        "INSERT INTO resume (id, filename, raw_text, structured_json, uploaded_at) VALUES (1, ?, ?, ?, ?)",
-        (filename, raw_text, json.dumps(structured_json), datetime.utcnow().isoformat())
+        "INSERT INTO resume (session_id, filename, raw_text, structured_json, uploaded_at) VALUES (?, ?, ?, ?, ?)",
+        (session_id, filename, raw_text, json.dumps(structured_json), datetime.utcnow().isoformat())
     )
     conn.commit()
     conn.close()
 
 
-def get_resume():
+def get_resume(session_id):
     conn = get_conn()
-    row = conn.execute("SELECT * FROM resume WHERE id = 1").fetchone()
+    row = conn.execute("SELECT * FROM resume WHERE session_id = ?", (session_id,)).fetchone()
     conn.close()
     if not row:
         return None
@@ -70,19 +72,19 @@ def get_resume():
     }
 
 
-def delete_resume():
+def delete_resume(session_id):
     conn = get_conn()
-    conn.execute("DELETE FROM resume WHERE id = 1")
+    conn.execute("DELETE FROM resume WHERE session_id = ?", (session_id,))
     conn.commit()
     conn.close()
 
 
-def save_analysis(jd_text, original_score, missing_keywords, suggestions):
+def save_analysis(session_id, jd_text, original_score, missing_keywords, suggestions):
     conn = get_conn()
     cur = conn.execute(
-        """INSERT INTO analysis (jd_text, original_score, missing_keywords, suggestions, created_at)
-           VALUES (?, ?, ?, ?, ?)""",
-        (jd_text, original_score, json.dumps(missing_keywords), json.dumps(suggestions),
+        """INSERT INTO analysis (session_id, jd_text, original_score, missing_keywords, suggestions, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (session_id, jd_text, original_score, json.dumps(missing_keywords), json.dumps(suggestions),
          datetime.utcnow().isoformat())
     )
     conn.commit()
@@ -91,19 +93,21 @@ def save_analysis(jd_text, original_score, missing_keywords, suggestions):
     return analysis_id
 
 
-def update_analysis_tailored(analysis_id, new_score, tailored_resume_json, cover_letter=None):
+def update_analysis_tailored(analysis_id, session_id, new_score, tailored_resume_json, cover_letter=None):
     conn = get_conn()
     conn.execute(
-        "UPDATE analysis SET new_score = ?, tailored_resume_json = ?, cover_letter = ? WHERE id = ?",
-        (new_score, json.dumps(tailored_resume_json), cover_letter, analysis_id)
+        "UPDATE analysis SET new_score = ?, tailored_resume_json = ?, cover_letter = ? WHERE id = ? AND session_id = ?",
+        (new_score, json.dumps(tailored_resume_json), cover_letter, analysis_id, session_id)
     )
     conn.commit()
     conn.close()
 
 
-def get_analysis(analysis_id):
+def get_analysis(analysis_id, session_id):
     conn = get_conn()
-    row = conn.execute("SELECT * FROM analysis WHERE id = ?", (analysis_id,)).fetchone()
+    row = conn.execute(
+        "SELECT * FROM analysis WHERE id = ? AND session_id = ?", (analysis_id, session_id)
+    ).fetchone()
     conn.close()
     if not row:
         return None

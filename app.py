@@ -1,6 +1,7 @@
 import os
 import uuid
-from flask import Flask, request, jsonify, render_template, send_file
+from datetime import timedelta
+from flask import Flask, request, jsonify, render_template, send_file, session
 
 import database as db
 import llm_agent as agent
@@ -14,6 +15,13 @@ ALLOWED_EXT = {"pdf", "docx", "txt"}
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5MB
 
+# Secret key signs the session cookie so each visitor's session_id can't be
+# forged. Set FLASK_SECRET_KEY in Render's environment variables for a
+# stable value; falls back to a random one (fine for local dev, but means
+# sessions reset whenever the local server restarts).
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24).hex())
+app.permanent_session_lifetime = timedelta(days=30)
+
 # This must run on import (not just when run directly with `python app.py`),
 # because gunicorn imports this module instead of executing it as __main__.
 # Without this, the database tables never get created on Render.
@@ -26,14 +34,25 @@ def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
 
 
+def get_session_id():
+    """Every visitor gets a random, persistent session id stored in a signed
+    cookie. This keeps each visitor's resume and analyses separate."""
+    if "sid" not in session:
+        session["sid"] = uuid.uuid4().hex
+        session.permanent = True
+    return session["sid"]
+
+
 @app.route("/")
 def index():
-    resume = db.get_resume()
+    sid = get_session_id()
+    resume = db.get_resume(sid)
     return render_template("index.html", resume=resume)
 
 
 @app.route("/api/resume", methods=["POST"])
 def upload_resume():
+    sid = get_session_id()
     if "resume" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
     file = request.files["resume"]
@@ -50,7 +69,7 @@ def upload_resume():
         if not raw_text.strip():
             return jsonify({"error": "Couldn't read any text from that file"}), 400
         structured = agent.parse_resume_to_structured(raw_text)
-        db.save_resume(file.filename, raw_text, structured)
+        db.save_resume(sid, file.filename, raw_text, structured)
         return jsonify({"ok": True, "resume": structured})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -61,25 +80,27 @@ def upload_resume():
 
 @app.route("/api/resume", methods=["DELETE"])
 def delete_resume():
-    db.delete_resume()
+    sid = get_session_id()
+    db.delete_resume(sid)
     return jsonify({"ok": True})
 
 
 @app.route("/api/analyze", methods=["POST"])
 def analyze():
+    sid = get_session_id()
     data = request.get_json(force=True)
     jd_text = (data.get("jd_text") or "").strip()
     if not jd_text:
         return jsonify({"error": "Paste a job description first"}), 400
 
-    resume = db.get_resume()
+    resume = db.get_resume(sid)
     if not resume:
         return jsonify({"error": "Upload a resume first"}), 400
 
     try:
         result = agent.score_resume_against_jd(resume["structured"], jd_text)
         analysis_id = db.save_analysis(
-            jd_text, result["score"], result.get("missing_keywords", []), result.get("suggestions", [])
+            sid, jd_text, result["score"], result.get("missing_keywords", []), result.get("suggestions", [])
         )
         return jsonify({
             "ok": True,
@@ -88,61 +109,70 @@ def analyze():
             "missing_keywords": result.get("missing_keywords", []),
             "suggestions": result.get("suggestions", []),
         })
+    except agent.AgentBusyError as e:
+        return jsonify({"error": str(e)}), 503
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/tailor", methods=["POST"])
 def tailor():
+    sid = get_session_id()
     data = request.get_json(force=True)
     analysis_id = data.get("analysis_id")
-    analysis = db.get_analysis(analysis_id)
-    resume = db.get_resume()
+    analysis = db.get_analysis(analysis_id, sid)
+    resume = db.get_resume(sid)
     if not analysis or not resume:
         return jsonify({"error": "Run an analysis first"}), 400
 
     try:
         tailored = agent.tailor_resume(resume["structured"], analysis["jd_text"], analysis["missing_keywords"])
         rescored = agent.score_resume_against_jd(tailored, analysis["jd_text"])
-        db.update_analysis_tailored(analysis_id, rescored["score"], tailored)
+        db.update_analysis_tailored(analysis_id, sid, rescored["score"], tailored)
         return jsonify({
             "ok": True,
             "tailored_resume": tailored,
             "new_score": rescored["score"],
             "original_score": analysis["original_score"],
         })
+    except agent.AgentBusyError as e:
+        return jsonify({"error": str(e)}), 503
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/cover-letter", methods=["POST"])
 def cover_letter():
+    sid = get_session_id()
     data = request.get_json(force=True)
     analysis_id = data.get("analysis_id")
-    analysis = db.get_analysis(analysis_id)
-    resume = db.get_resume()
+    analysis = db.get_analysis(analysis_id, sid)
+    resume = db.get_resume(sid)
     if not analysis or not resume:
         return jsonify({"error": "Run an analysis first"}), 400
 
     resume_for_letter = analysis["tailored_resume_json"] or resume["structured"]
     try:
         letter = agent.write_cover_letter(resume_for_letter, analysis["jd_text"])
-        db.update_analysis_tailored(analysis_id, analysis["new_score"], analysis["tailored_resume_json"], letter)
+        db.update_analysis_tailored(analysis_id, sid, analysis["new_score"], analysis["tailored_resume_json"], letter)
         return jsonify({"ok": True, "cover_letter": letter})
+    except agent.AgentBusyError as e:
+        return jsonify({"error": str(e)}), 503
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/download/<fmt>")
 def download(fmt):
+    sid = get_session_id()
     analysis_id = request.args.get("analysis_id")
     resume_data = None
     if analysis_id:
-        analysis = db.get_analysis(analysis_id)
+        analysis = db.get_analysis(analysis_id, sid)
         if analysis and analysis["tailored_resume_json"]:
             resume_data = analysis["tailored_resume_json"]
     if resume_data is None:
-        resume = db.get_resume()
+        resume = db.get_resume(sid)
         if not resume:
             return jsonify({"error": "No resume available"}), 400
         resume_data = resume["structured"]
